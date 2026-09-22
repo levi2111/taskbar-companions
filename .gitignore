@@ -1,0 +1,13 @@
+# Build output
+**/bin/
+**/obj/
+app/
+
+# Local state: saved positions and usage files
+**/data/
+
+# Local-only files
+artifacts/
+*.lnk
+.vs/
+*.user
