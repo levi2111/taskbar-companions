@@ -40,7 +40,7 @@ public sealed class JsonUsageProvider : IUsageProvider
 
 // Live Codex limits from the official App Server (`codex app-server`, JSON-RPC over stdio):
 // `account/rateLimits/read` returns the ChatGPT plan's windows without sending a message or
-// spending allowance. Uses the codex.exe bundled with the Codex VS Code extension.
+// spending allowance. Uses the codex.exe bundled with the Codex VS Code extension, unless another is chosen.
 public sealed class CodexAppServerProvider : IUsageProvider
 {
     private static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(60);
@@ -81,7 +81,7 @@ public sealed class CodexAppServerProvider : IUsageProvider
         nextStart = now.AddMinutes(1);   // back off if it fails or exits
         ready = false;
         server = null;
-        if (FindCodex() is not string exe) return;
+        if (AppSettings.Current.CodexExecutable is not string exe) return;
         var process = new System.Diagnostics.Process
         {
             StartInfo = new(exe, "app-server")
@@ -145,8 +145,10 @@ public sealed class CodexAppServerProvider : IUsageProvider
         return weekly is null && session is null ? null : new(weekly, session, at, "Codex account (live)");
     }
 
-    private static string? FindCodex()
+    // A codex.exe chosen in Settings, then CODEX_PATH, the Codex extension, and PATH.
+    internal static string? FindCodex(string? chosen)
     {
+        if (chosen is not null && File.Exists(chosen)) return chosen;
         if (Environment.GetEnvironmentVariable("CODEX_PATH") is string custom && File.Exists(custom)) return custom;
         var exe = ExtensionDirectories()
             .Select(d => Path.Combine(d.FullName, "bin", "windows-x86_64", "codex.exe"))
@@ -201,8 +203,7 @@ public sealed class ClaudeUsageProvider : IUsageProvider
         }
     }
 
-    private static string CredentialsPath => Path.Combine(
-        Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude"), ".credentials.json");
+    private static string CredentialsPath => Path.Combine(AppSettings.Current.ClaudeDirectory, ".credentials.json");
 
     public UsageSnapshot Read(string characterId)
     {
@@ -224,8 +225,7 @@ public sealed class ClaudeUsageProvider : IUsageProvider
     // Claude Code caches its own usage reading in .claude.json; reusing it avoids the rate-limited endpoint.
     private static UsageSnapshot? ReadClaudeCache()
     {
-        var dir = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
-        var path = dir is not null ? Path.Combine(dir, ".claude.json") : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude.json");
+        var path = AppSettings.Current.ClaudeStateFile;
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -296,8 +296,7 @@ public sealed class CodexSessionProvider : IUsageProvider
     private (string Path, DateTime Written, long Length)? newest;
     private UsageSnapshot? latest;
 
-    public CodexSessionProvider(string? root = null) => this.root = root ?? Path.Combine(
-        Environment.GetEnvironmentVariable("CODEX_HOME") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex"), "sessions");
+    public CodexSessionProvider(string? root = null) => this.root = root ?? Path.Combine(AppSettings.Current.CodexDirectory, "sessions");
 
     public UsageSnapshot Read(string characterId)
     {

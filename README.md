@@ -1,6 +1,6 @@
 # Taskbar companions
 
-Two little desktop companions for Windows that sit on your taskbar and show how much of your **Codex** and **Claude** plan allowance is left, as RPG-style HP and MP bars. One process, two independent transparent windows.
+Two little desktop companions for Windows that sit on your taskbar and show how much of your **Codex** and **Claude** plan allowance is left, as RPG-style HP and MP bars. One process, one independent transparent window per companion. Use either one on its own, or both.
 
 - **Codex** is the default blue Codex pet when the Codex extension is installed. Otherwise the little terminal explorer, drawn in this project, comes along in his place.
 - **Claude** is Clawd, the pixel critter from Claude Code's terminal banner, redrawn in code.
@@ -16,6 +16,8 @@ Two little desktop companions for Windows that sit on your taskbar and show how 
 - For live Codex usage and the Codex pet: the Codex extension for VS Code, VS Code Insiders or Cursor, signed in.
 - For Claude usage: Claude Code, signed in with a Pro or Max plan.
 
+You only need the tool for the companion you want. On first start the app shows the companions whose tools it finds (both, if it finds neither); **Settings** changes that.
+
 ## Run
 
 ```powershell
@@ -28,16 +30,17 @@ powershell -ExecutionPolicy Bypass -File .\launch.ps1
 
 There are no prebuilt downloads. The exe you build is unsigned, so Windows Smart App Control or SmartScreen may block it; that's expected for unsigned apps.
 
-- Right-click the running app's taskbar icon and choose **Pin to taskbar**. Both characters share one taskbar button and one Alt+Tab entry. Keep the `app` folder in place after pinning.
-- Right-click either character and choose **Minimize companions**. The shared taskbar button minimizes and restores both together; launching again restores both without moving them.
-- The tray menu also offers **Restore companions**, **Bring both home**, **Demo usage on / off**, and **Quit**. Closing either character minimizes both.
+- Right-click the running app's taskbar icon and choose **Pin to taskbar**. The characters share one taskbar button and one Alt+Tab entry. Keep the `app` folder in place after pinning.
+- Right-click a character and choose **Minimize companions**. The shared taskbar button minimizes and restores them together; launching again restores them without moving them.
+- The tray menu also offers **Restore companions**, **Bring companions home**, **Demo usage on / off**, **Settings…**, and **Quit**. Closing a character minimizes all of them.
+- **Settings…** (in the tray menu and each character's right-click menu) shows or hides each companion, and says what it found for each: Claude Code's folder, `codex.exe`, Codex's session logs, and the Codex pet's artwork. If Claude Code or Codex keeps its data somewhere unusual, pick the folder (or `codex.exe`) there. **Hide this companion** in a character's right-click menu hides it straight away; the last one showing can't be hidden.
 - Drag a character or its bars to move it. **Sit on taskbar** toggles docking; **Return home** resets placement.
 - Each character has two floating tracks: green HP for weekly allowance remaining, blue MP for the short (five-hour) window. Inside each bar is the time until that window resets. HP shows whole days ("5d") until three days remain, then "2d 4h", "9h", and "4h 12m" under five hours. MP shows "2h 13m". Hover a bar for details and where the data came from; hover a character for one of its lines.
 - When a window resets, its bar drains and pours back full with a shine, and the character celebrates. **Preview reset celebration** in the right-click menu plays it on demand.
 - Unknown usage leaves the bars empty. **Demo usage on / off** shows sample values, and the hover details say so.
 - Fullscreen apps temporarily hide the companions without minimizing them.
 
-Saved positions and bridge files live in `app\data`.
+Settings, saved positions and bridge files live in `app\data`.
 
 ## The characters
 
@@ -69,15 +72,15 @@ Nothing here sends a message or spends allowance. If a source has gone quiet, th
 
 ### Codex (ChatGPT plan)
 
-- **Codex App Server (live).** The app starts the official [App Server](https://learn.chatgpt.com/docs/app-server) (`codex.exe app-server`, from the Codex extension, from `PATH`, or from `CODEX_PATH`) hidden in the background. It asks `account/rateLimits/read` once a minute and three seconds after a reset. This is the same read-only call the Codex app uses. The App Server signs in with Codex's own login and talks to OpenAI itself; this app never handles your Codex credentials.
-- **Codex session logs (local).** Between polls, and whenever the App Server is unavailable, the app reads the `rate_limits` Codex writes after each reply under `%USERPROFILE%\.codex\sessions` (or `CODEX_HOME`), whichever is newer.
+- **Codex App Server (live).** The app starts the official [App Server](https://learn.chatgpt.com/docs/app-server) (`codex.exe app-server`: the one chosen in Settings, or from `CODEX_PATH`, the Codex extension, or `PATH`) hidden in the background. It asks `account/rateLimits/read` once a minute and three seconds after a reset. This is the same read-only call the Codex app uses. The App Server signs in with Codex's own login and talks to OpenAI itself; this app never handles your Codex credentials.
+- **Codex session logs (local).** Between polls, and whenever the App Server is unavailable, the app reads the `rate_limits` Codex writes after each reply under `%USERPROFILE%\.codex\sessions` (or the Codex folder chosen in Settings, or `CODEX_HOME`), whichever is newer.
 - Both use the `codex` bucket and classify windows by duration: under a day is MP, a day or more is HP. With neither available, the app falls back to `app\data\codex.usage.json` (see [Other sources](#other-sources)).
 
 ### Claude (Pro/Max plan)
 
 By default, Claude usage comes only from local files:
 
-- **Claude Code's own cache.** Claude Code stores its latest usage reading in `~\.claude.json` (or under `$CLAUDE_CONFIG_DIR`). The app reads only that entry, so it's as fresh as Claude Code's last check.
+- **Claude Code's own cache.** Claude Code stores its latest usage reading in `~\.claude.json` (or in the Claude Code folder chosen in Settings, or under `$CLAUDE_CONFIG_DIR`). The app reads only that entry, so it's as fresh as Claude Code's last check.
 - **Status line bridge.** `bridge/claude-statusline.js` is a Claude Code [status line](https://code.claude.com/docs/en/statusline) command. Claude Code passes it `rate_limits.five_hour` and `rate_limits.seven_day` after the first response of a session. It prints `Opus · 5h 24% · 7d 41%` in Claude Code and atomically writes `app\data\claude.usage.json`. It needs [Node.js](https://nodejs.org/). Enable it in `~\.claude\settings.json`, replacing the path with where you cloned this repo:
 
   ```json
@@ -125,9 +128,11 @@ No telemetry, no other network access, and no NuGet packages (`NuGet.Config` cle
 - `TerminalExplorer.cs`: the terminal explorer.
 - `CharacterView.cs`: animation clock, pointer and hover tracking, dialogue tooltips.
 - `Usage.cs`: usage providers, the JSON bridge, freshness and countdown formatting.
-- `CompanionWindow.cs`: each companion's window, floating bars, menus and saved settings.
+- `CompanionWindow.cs`: each companion's window, floating bars, menus and saved position.
+- `Settings.cs`: which companions show, where Claude Code and Codex keep their data, and detecting them.
+- `SettingsWindow.cs`: the Settings window.
 - `Desktop.cs`: monitor positioning and fullscreen detection.
-- `App.xaml.cs`: process lifetime, single instance, and tray menu.
+- `App.xaml.cs`: process lifetime, single instance, tray menu, and opening a window for each companion shown.
 
 ## Build and checks
 
@@ -135,8 +140,8 @@ No telemetry, no other network access, and no NuGet packages (`NuGet.Config` cle
 dotnet build TaskbarCompanions/TaskbarCompanions.csproj --configfile NuGet.Config
 ```
 
-- **Logic checks:** run the built exe with `--self-test`. It writes `checks.txt` beside the exe and exits with 0 on success, 1 on failure. It covers countdown boundaries, data freshness, malformed JSON, quota bounds, Codex log and App Server parsing, Claude usage parsing, bar labels, reset refills, fullscreen versus maximized geometry, and the Codex artwork fallback.
-- **Startup smoke check:** run with `--smoke-test`. It opens both windows alongside any running copy, checks the shared taskbar entry and minimize/restore, renders `codex.preview.png` and `claude.preview.png` mid reset celebration, writes `desktop-checks.txt`, and exits after about four seconds.
+- **Logic checks:** run the built exe with `--self-test`. It writes `checks.txt` beside the exe and exits with 0 on success, 1 on failure. It covers countdown boundaries, data freshness, malformed JSON, quota bounds, Codex log and App Server parsing, Claude usage parsing, bar labels, reset refills, fullscreen versus maximized geometry, and the Codex artwork fallback and transparency, and choosing companions and folders.
+- **Startup smoke check:** run with `--smoke-test`. It opens the companions the settings show alongside any running copy, checks the shared taskbar entry and minimize/restore, renders `codex.preview.png` and/or `claude.preview.png` mid reset celebration, writes `desktop-checks.txt`, and exits after about four seconds.
 
 ## Scope and known limits
 

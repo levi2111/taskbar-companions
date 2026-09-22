@@ -11,22 +11,27 @@ namespace TaskbarCompanions;
 public sealed class CompanionWindow : Window
 {
     private readonly CharacterDefinition character;
+    private readonly int home;
     private readonly CharacterView sprite;
     private readonly IUsageProvider provider;
     private readonly DispatcherTimer timer;
     private readonly QuotaRow weekly;
     private readonly QuotaRow session;
     private UsageSnapshot usage = new();
-    private bool demo, paused, dragging, docked = true;
+    private bool demo, paused, dragging, dismissed, docked = true;
     private DateTimeOffset nextRead, lastCheck = DateTimeOffset.UtcNow;
     private Point? press;
     private MenuItem dockMenu = null!;
     private MenuItem? liveMenu;
     private string SettingsPath => Path.Combine(JsonUsageProvider.DataDirectory, character.Id + ".position.json");
 
-    public CompanionWindow(CharacterDefinition character)
+    public string CharacterId => character.Id;
+
+    // `home` is this companion's place among the visible ones, counted from the right end of the taskbar.
+    public CompanionWindow(CharacterDefinition character, int home)
     {
         this.character = character;
+        this.home = home;
         // Codex polls its account through the official App Server and falls back to its session logs.
         // Claude reads local data (Claude Code's cache, the status line bridge) unless live usage is turned on.
         provider = character.Id == "codex" ? new CodexAppServerProvider() : new ClaudeUsageProvider();
@@ -59,7 +64,7 @@ public sealed class CompanionWindow : Window
             press = null; dragging = sprite.Dragged = true;
             try { DragMove(); } catch (InvalidOperationException) { }
             finally { dragging = sprite.Dragged = false; }
-            if (docked) Desktop.Dock(this, character.HomeIndex, false);
+            if (docked) Desktop.Dock(this, home, false);
             SavePosition();
         };
         root.MouseLeftButtonUp += (_, _) =>
@@ -69,7 +74,7 @@ public sealed class CompanionWindow : Window
             press = null;
         };
         Loaded += (_, _) => RestorePosition();
-        Closing += (_, e) => { e.Cancel = true; Minimize(); };
+        Closing += (_, e) => { if (dismissed) return; e.Cancel = true; Minimize(); };
         timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         timer.Tick += (_, _) => Tick(); timer.Start();
     }
@@ -80,7 +85,7 @@ public sealed class CompanionWindow : Window
         void Item(string label, Action action) { var item = new MenuItem { Header = label }; item.Click += (_, _) => action(); menu.Items.Add(item); }
         Item("Minimize companions", Minimize);
         var dock = dockMenu = new MenuItem { Header = "Sit on taskbar", IsCheckable = true, IsChecked = true };
-        dock.Click += (_, _) => { docked = dock.IsChecked; if (docked) Desktop.Dock(this, character.HomeIndex, false); SavePosition(); };
+        dock.Click += (_, _) => { docked = dock.IsChecked; if (docked) Desktop.Dock(this, home, false); SavePosition(); };
         menu.Items.Add(dock);
         Item("Pause / resume animation", ToggleAnimation);
         Item("Demo usage on / off", ToggleDemo);
@@ -97,6 +102,13 @@ public sealed class CompanionWindow : Window
             menu.Items.Add(live);
         }
         menu.Items.Add(new Separator());
+        var app = (App)System.Windows.Application.Current;
+        Item("Settings…", app.OpenSettings);
+        var hide = new MenuItem { Header = "Hide this companion", ToolTip = "Bring it back from Settings." };
+        hide.Click += (_, _) => app.HideCompanion(character.Id);
+        menu.Items.Add(hide);
+        // The last visible companion stays; the app would have nothing left on screen.
+        menu.Opened += (_, _) => hide.IsEnabled = app.CompanionCount > 1;
         Item("Quit application", () => System.Windows.Application.Current.Shutdown());
         return menu;
     }
@@ -112,7 +124,7 @@ public sealed class CompanionWindow : Window
             // Keep the taskbar button available, and never undo a user's minimize.
             Opacity = fullscreen ? 0 : 1;
             IsHitTestVisible = !fullscreen;
-            if (!fullscreen && WindowState != WindowState.Minimized && docked && !dragging) Desktop.Dock(this, character.HomeIndex, false);
+            if (!fullscreen && WindowState != WindowState.Minimized && docked && !dragging) Desktop.Dock(this, home, false);
             if (!demo) usage = provider.Read(character.Id);
             // A window resetting while we watch is worth a celebration and a fresh reading.
             bool Crossed(Quota? q) => q?.ResetsAt is DateTimeOffset r && r > lastCheck && r <= now;
@@ -145,15 +157,18 @@ public sealed class CompanionWindow : Window
     {
         demo = !demo;
         var now = DateTimeOffset.UtcNow;
-        usage = demo ? new(new(character.HomeIndex == 0 ? 76 : 62, now.AddDays(3).AddHours(7)), new(character.HomeIndex == 0 ? 48 : 83, now.AddHours(2).AddMinutes(14)), now, "Demo") : new();
+        usage = demo ? new(new(character.Id == "codex" ? 76 : 62, now.AddDays(3).AddHours(7)), new(character.Id == "codex" ? 48 : 83, now.AddHours(2).AddMinutes(14)), now, "Demo") : new();
         nextRead = default;
     }
 
     public void ToggleAnimation() { paused = !paused; sprite.Paused = paused; sprite.InvalidateVisual(); }
     public void Minimize() => ((App)System.Windows.Application.Current).MinimizeCompanions();
     public void Restore() { ((App)System.Windows.Application.Current).RestoreCompanions(); nextRead = default; }
-    public void ResetPosition() { Restore(); docked = true; dockMenu.IsChecked = true; Desktop.Dock(this, character.HomeIndex, true); SavePosition(); }
+    public void ResetPosition() { Restore(); docked = true; dockMenu.IsChecked = true; Desktop.Dock(this, home, true); SavePosition(); }
     public void Cleanup() { timer.Stop(); provider.Dispose(); SavePosition(); }
+
+    // Closes for good, when the set of companions changes; closing from the window itself only minimizes.
+    public void Dismiss() { Cleanup(); dismissed = true; Close(); }
 
     internal void SavePreview()
     {
@@ -188,7 +203,7 @@ public sealed class CompanionWindow : Window
                         return s.WorkingArea.IntersectsWith(new System.Drawing.Rectangle((int)(Left * dpi.DpiScaleX), (int)(Top * dpi.DpiScaleY), (int)(Width * dpi.DpiScaleX), (int)(Height * dpi.DpiScaleY)));
                     });
                     if (!visible) ResetPosition();
-                    else if (docked) Desktop.Dock(this, character.HomeIndex, false);
+                    else if (docked) Desktop.Dock(this, home, false);
                     return;
                 }
             }

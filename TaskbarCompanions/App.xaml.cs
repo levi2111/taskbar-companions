@@ -11,6 +11,9 @@ public partial class App : System.Windows.Application
     private EventWaitHandle? showRequest;
     private System.Windows.Threading.DispatcherTimer? requestTimer;
     private bool changingWindowState;
+    private SettingsWindow? settingsWindow;
+
+    public int CompanionCount => companions.Count;
 
     public void MinimizeCompanions() => SetCompanionState(WindowState.Minimized);
     public void RestoreCompanions() => SetCompanionState(WindowState.Normal);
@@ -46,31 +49,15 @@ public partial class App : System.Windows.Application
         showRequest = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\TaskbarCompanions.Show." + scope);
         instance = new Mutex(true, "Local\\TaskbarCompanions." + scope, out var created);
         if (!created) { showRequest.Set(); Shutdown(); return; }
-        foreach (var character in CharacterCatalog.All)
-        {
-            var window = new CompanionWindow(character);
-            if (companions.Count == 0)
-            {
-                MainWindow = window;
-                window.Title = "Taskbar Companions";
-                window.ShowInTaskbar = true;
-                window.StateChanged += (_, _) => SetCompanionState(window.WindowState);
-            }
-            else
-            {
-                // Owned windows keep independent positions and behavior, but share
-                // the primary window's taskbar and Alt+Tab entry.
-                window.Owner = MainWindow;
-            }
-            companions.Add(window);
-            window.Show();
-        }
+        ShowCompanions();
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Restore companions", null, (_, _) => RestoreCompanions());
         menu.Items.Add("Minimize companions", null, (_, _) => MinimizeCompanions());
-        menu.Items.Add("Bring both home", null, (_, _) => companions.ForEach(w => w.ResetPosition()));
+        menu.Items.Add("Bring companions home", null, (_, _) => companions.ForEach(w => w.ResetPosition()));
         menu.Items.Add("Demo usage on / off", null, (_, _) => companions.ForEach(w => w.ToggleDemo()));
-        menu.Items.Add("Pause / resume both", null, (_, _) => companions.ForEach(w => w.ToggleAnimation()));
+        menu.Items.Add("Pause / resume companions", null, (_, _) => companions.ForEach(w => w.ToggleAnimation()));
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("Settings…", null, (_, _) => OpenSettings());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => Shutdown());
         tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? System.Drawing.SystemIcons.Application, Text = "Taskbar companions", ContextMenuStrip = menu, Visible = true };
@@ -111,6 +98,57 @@ public partial class App : System.Windows.Application
             };
             timer.Start();
         }
+    }
+
+    // Opens a window for each companion the settings show, replacing any already open.
+    private void ShowCompanions()
+    {
+        foreach (var old in Enumerable.Reverse(companions)) old.Dismiss();
+        companions.Clear();
+        var shown = CharacterCatalog.All.Where(c => AppSettings.Current.Shows(c.Id)).ToList();
+        if (shown.Count == 0) shown = CharacterCatalog.All.ToList();
+        foreach (var character in shown)
+        {
+            var window = new CompanionWindow(character, companions.Count);
+            if (companions.Count == 0)
+            {
+                MainWindow = window;
+                window.Title = "Taskbar Companions";
+                window.ShowInTaskbar = true;
+                window.StateChanged += (_, _) => SetCompanionState(window.WindowState);
+            }
+            else
+            {
+                // Owned windows keep independent positions and behavior, but share
+                // the primary window's taskbar and Alt+Tab entry.
+                window.Owner = MainWindow;
+            }
+            companions.Add(window);
+            window.Show();
+        }
+    }
+
+    public void OpenSettings()
+    {
+        if (settingsWindow is not null) { settingsWindow.Activate(); return; }
+        settingsWindow = new SettingsWindow(AppSettings.Current, ApplySettings);
+        settingsWindow.Closed += (_, _) => settingsWindow = null;
+        settingsWindow.Show();
+        settingsWindow.Activate();
+    }
+
+    public void HideCompanion(string id)
+    {
+        if (companions.Count < 2) return;
+        bool Keeps(string other) => other != id && companions.Any(w => w.CharacterId == other);
+        ApplySettings(AppSettings.Current with { ShowClaude = Keeps("claude"), ShowCodex = Keeps("codex") });
+    }
+
+    private void ApplySettings(AppSettings settings)
+    {
+        settings.Save();
+        // Rebuild after the click that asked for it has finished; it may come from a window being replaced.
+        Dispatcher.InvokeAsync(ShowCompanions);
     }
 
     protected override void OnExit(ExitEventArgs e)

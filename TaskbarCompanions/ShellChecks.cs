@@ -85,6 +85,26 @@ internal static class ShellChecks
             Check(CodexCompanion.LoadFrames(sheet) is null && CodexCompanion.LoadFrames(sheet + ".missing") is null && CodexCompanion.LoadFrames(null) is null, "codex artwork fallback");
         }
         finally { if (File.Exists(sheet)) File.Delete(sheet); }
+        // Windows' WebP decoder reports the Codex sheet as opaque Bgr32 with its alpha in the fourth byte.
+        System.Windows.Media.Imaging.BitmapSource Pixels(params byte[] bgrx) => System.Windows.Media.Imaging.BitmapSource.Create(
+            bgrx.Length / 4, 1, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null, bgrx, bgrx.Length);
+        var cutout = CodexCompanion.WithAlpha(Pixels(0, 0, 0, 0, 10, 20, 30, 255));
+        var alpha = new byte[8];
+        cutout.CopyPixels(alpha, 8, 0);
+        Check(cutout.Format == System.Windows.Media.PixelFormats.Bgra32 && alpha[3] == 0 && alpha[7] == 255, "codex artwork keeps its transparency");
+        Check(CodexCompanion.WithAlpha(Pixels(10, 20, 30, 0)).Format == System.Windows.Media.PixelFormats.Bgr32, "opaque artwork stays opaque");
+
+        Check(!new AppSettings { ShowClaude = false, ShowCodex = true }.Shows("claude") && new AppSettings { ShowClaude = false, ShowCodex = true }.Shows("codex"), "chosen companions win over detection");
+        var claudeHome = Path.Combine(Path.GetTempPath(), id + "-claude");
+        try
+        {
+            Directory.CreateDirectory(claudeHome);
+            var chosen = new AppSettings { ClaudeFolder = "  \"" + claudeHome + "\" " };
+            Check(chosen.ClaudeFound && chosen.Shows("claude") && chosen.ClaudeDirectory == claudeHome
+                && chosen.ClaudeStateFile == Path.Combine(claudeHome, ".claude.json"), "chosen Claude folder is found and holds its state");
+            Check(!new AppSettings { ClaudeFolder = claudeHome + "-missing" }.ClaudeFound, "missing Claude folder");
+        }
+        finally { if (Directory.Exists(claudeHome)) Directory.Delete(claudeHome); }
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "checks.txt"), $"PASS: {count} checks");
     }
 }

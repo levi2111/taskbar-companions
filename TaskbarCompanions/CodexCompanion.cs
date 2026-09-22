@@ -43,6 +43,7 @@ internal static class CodexCompanion
             or FileFormatException or System.Runtime.InteropServices.ExternalException) { return null; }
         // Only the known layout of 192 × 208 cells; a future sheet with another layout falls back.
         if (sheet.PixelWidth != 8 * 192 || sheet.PixelHeight != counts.Length * 208) return null;
+        var source = WithAlpha(sheet);
         var rows = new BitmapSource[counts.Length][];
         int width = sheet.PixelWidth / 8, height = sheet.PixelHeight / counts.Length;
         for (int row = 0; row < counts.Length; row++)
@@ -50,12 +51,29 @@ internal static class CodexCompanion
             rows[row] = new BitmapSource[counts[row]];
             for (int column = 0; column < counts[row]; column++)
             {
-                var frame = new CroppedBitmap(sheet, new Int32Rect(column * width, row * height, width, height));
+                var frame = new CroppedBitmap(source, new Int32Rect(column * width, row * height, width, height));
                 frame.Freeze();
                 rows[row][column] = frame;
             }
         }
         return rows;
+    }
+
+    // Windows' WebP decoder reports the sheet as opaque Bgr32, but the fourth byte still holds its
+    // transparency; drawn as is, the background comes out black. Reread those bytes as alpha.
+    // A genuinely opaque Bgr32 image leaves that byte at zero and is kept as it is.
+    internal static BitmapSource WithAlpha(BitmapSource image)
+    {
+        if (image.Format != PixelFormats.Bgr32) return image;
+        var stride = image.PixelWidth * 4;
+        var pixels = new byte[stride * image.PixelHeight];
+        image.CopyPixels(pixels, stride, 0);
+        var hasAlpha = false;
+        for (var i = 3; i < pixels.Length && !hasAlpha; i += 4) hasAlpha = pixels[i] != 0;
+        if (!hasAlpha) return image;
+        var result = BitmapSource.Create(image.PixelWidth, image.PixelHeight, image.DpiX, image.DpiY, PixelFormats.Bgra32, null, pixels, stride);
+        result.Freeze();
+        return result;
     }
 
     public static void Draw(DrawingContext d, CharacterFrame f)
