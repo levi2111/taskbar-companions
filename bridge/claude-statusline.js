@@ -1,9 +1,11 @@
 // Claude Code status line: shows plan usage and publishes it for the Claude companion.
 // Claude Code passes `rate_limits` (Pro/Max, after the first response of a session) on stdin.
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
-const target = path.join(__dirname, '..', 'app', 'data', 'claude.usage.json');
+// The app's data folder, %LOCALAPPDATA%\TaskbarCompanions, wherever the app or this script is installed.
+const target = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'TaskbarCompanions', 'claude.usage.json');
 
 const quota = window => window && typeof window.used_percentage === 'number'
     ? {

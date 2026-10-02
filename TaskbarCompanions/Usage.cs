@@ -18,7 +18,30 @@ public interface IUsageProvider
 // A stable local bridge: any tool can publish usage for an agent by writing its JSON file.
 public sealed class JsonUsageProvider : IUsageProvider
 {
-    public static string DataDirectory => Path.Combine(AppContext.BaseDirectory, "data");
+    // Settings, saved positions and bridge files, per Windows user. Outside the program folder, so the app
+    // works wherever it's installed, and only this user can change what it reads or which codex.exe it starts.
+    public static string DataDirectory { get; } = Prepare(
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TaskbarCompanions"),
+        Path.Combine(AppContext.BaseDirectory, "data"));
+
+    // Earlier versions kept settings and positions in a data folder beside the exe; copy over any not here yet.
+    internal static string Prepare(string directory, string old)
+    {
+        try
+        {
+            if (Directory.Exists(old))
+                foreach (var file in Directory.EnumerateFiles(old, "*.json").Where(f => !f.EndsWith(".usage.json", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var target = Path.Combine(directory, Path.GetFileName(file));
+                    if (File.Exists(target)) continue;
+                    Directory.CreateDirectory(directory);
+                    File.Copy(file, target);
+                }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        return directory;
+    }
+
     public UsageSnapshot Read(string characterId)
     {
         var path = Path.Combine(DataDirectory, characterId + ".usage.json");
@@ -98,7 +121,7 @@ public sealed class CodexAppServerProvider : IUsageProvider
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         server = process;
-        Send("{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"taskbar-companions\",\"version\":\"1.0\"}}}");
+        Send($"{{\"id\":1,\"method\":\"initialize\",\"params\":{{\"clientInfo\":{{\"name\":\"taskbar-companions\",\"version\":\"{AboutWindow.Version}\"}}}}}}");
     }
 
     private void Send(string message)
@@ -145,18 +168,20 @@ public sealed class CodexAppServerProvider : IUsageProvider
         return weekly is null && session is null ? null : new(weekly, session, at, "Codex account (live)");
     }
 
-    // A codex.exe chosen in Settings, then CODEX_PATH, the Codex extension, and PATH.
+    // A codex.exe chosen in Settings, then CODEX_PATH, the Codex extension, and PATH. Only full paths count:
+    // a relative one (or an empty PATH entry) would pick up a codex.exe from whatever folder the app started in.
     internal static string? FindCodex(string? chosen)
     {
-        if (chosen is not null && File.Exists(chosen)) return chosen;
-        if (Environment.GetEnvironmentVariable("CODEX_PATH") is string custom && File.Exists(custom)) return custom;
+        static bool Usable(string? path) => path is not null && Path.IsPathFullyQualified(path) && File.Exists(path);
+        if (Usable(chosen)) return chosen;
+        if (Environment.GetEnvironmentVariable("CODEX_PATH") is string custom && Usable(custom)) return custom;
         var exe = ExtensionDirectories()
             .Select(d => Path.Combine(d.FullName, "bin", "windows-x86_64", "codex.exe"))
             .FirstOrDefault(File.Exists);
         if (exe is not null) return exe;
         return (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)
-            .Select(dir => { try { return Path.Combine(dir.Trim(), "codex.exe"); } catch (ArgumentException) { return ""; } })
-            .FirstOrDefault(File.Exists);
+            .Select(dir => { try { return Path.Combine(dir.Trim().Trim('"'), "codex.exe"); } catch (ArgumentException) { return ""; } })
+            .FirstOrDefault(Usable);
     }
 
     // Installed copies of the Codex extension for VS Code, VS Code Insiders and Cursor, newest first per editor.
@@ -174,34 +199,22 @@ public sealed class CodexAppServerProvider : IUsageProvider
 }
 
 // Claude limits. By default only from local sources: the usage reading Claude Code caches in
-// .claude.json, and the status line bridge. Opting in to live usage also polls the endpoint behind
-// Claude Code's /usage screen. That endpoint is undocumented, so it may change; it reads the login
-// Claude Code stores and never refreshes or sends it anywhere else. Checking usage sends no message
-// and spends no allowance.
+// .claude.json, and the status line bridge. Live account usage, a risky opt-in in Settings, also
+// polls the endpoint behind Claude Code's /usage screen. That endpoint is undocumented, so it may
+// change, and Anthropic's terms don't allow other apps to use Claude Code's login, which is why
+// Settings warns before turning it on. It reads the login Claude Code stores and never refreshes it
+// or sends it anywhere else. Checking usage sends no message and spends no allowance.
 public sealed class ClaudeUsageProvider : IUsageProvider
 {
-    private static readonly System.Net.Http.HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    // Never follow redirects: the login token goes to api.anthropic.com and nowhere else.
+    private static readonly System.Net.Http.HttpClient Http = new(new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
     private static readonly TimeSpan PollEvery = TimeSpan.FromMinutes(2);
     private readonly IUsageProvider fallback = new JsonUsageProvider();
     private readonly object gate = new();
     private DateTime nextPoll;
     private bool polling;
-    private volatile bool enabled;
     private volatile UsageSnapshot? latest;
     private volatile string? problem;
-
-    // Off by default; turned on from Claude's right-click menu.
-    public bool Live
-    {
-        get => enabled;
-        set
-        {
-            enabled = value;
-            // Drop any live reading; the next poll takes the cache again.
-            if (!value) { latest = null; problem = null; }
-            Refresh();
-        }
-    }
 
     private static string CredentialsPath => Path.Combine(AppSettings.Current.ClaudeDirectory, ".credentials.json");
 
@@ -243,7 +256,8 @@ public sealed class ClaudeUsageProvider : IUsageProvider
         var cached = ReadClaudeCache();
         if (cached is not null && !(latest?.UpdatedAt >= cached.UpdatedAt)) latest = cached;
         if (cached?.UpdatedAt > DateTimeOffset.UtcNow - PollEvery) { problem = null; lock (gate) polling = false; return; }
-        if (!enabled) { problem = latest is null ? "live usage is off, right-click Claude to turn it on" : null; lock (gate) polling = false; return; }
+        // Off unless the user turned it on in Settings, after its warning.
+        if (!AppSettings.Current.ClaudeLiveUsage) { problem = latest is null ? "no reading from Claude Code yet" : null; lock (gate) polling = false; return; }
         try
         {
             using var credentials = JsonDocument.Parse(await File.ReadAllTextAsync(CredentialsPath));

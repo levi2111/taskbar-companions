@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/levi2111/taskbar-companions/security/advisories/new
+    about: Please don't report security problems in public issues.
+  - name: Install guide and troubleshooting
+    url: https://github.com/levi2111/taskbar-companions/blob/main/docs/INSTALL.md#troubleshooting
+    about: Answers to the most common problems.

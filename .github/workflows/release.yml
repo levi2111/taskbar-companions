@@ -1,0 +1,70 @@
+name: Release
+
+# Builds the installer, portable zip and checksums with packaging\build.ps1.
+# Pushing a v* tag also records build provenance and creates a draft GitHub release to review and publish.
+# Running it by hand (Actions > Release > Run workflow) is a dry run: the files stay on the run as an artifact.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write       # create the draft release
+      id-token: write       # sign the build provenance
+      attestations: write   # store it
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Check the tag matches the project version
+        if: github.ref_type == 'tag'
+        shell: powershell
+        run: |
+          $version = ([xml](Get-Content TaskbarCompanions\TaskbarCompanions.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "Tag $env:GITHUB_REF_NAME doesn't match <Version> $version in the project file." }
+
+      - name: Build the release files
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build.ps1 -RequireInstaller
+
+      - name: Record build provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*.exe
+            dist/*.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-files
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/SHA256SUMS.txt
+            dist/release-notes.md
+
+      - name: Create the draft release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*.exe dist/*.zip dist/SHA256SUMS.txt
+          --repo "$GITHUB_REPOSITORY" --draft --verify-tag
+          --title "Taskbar Companions ${GITHUB_REF_NAME#v}" --notes-file dist/release-notes.md

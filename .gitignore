@@ -2,6 +2,7 @@
 **/bin/
 **/obj/
 app/
+dist/
 
 # Local state: saved positions and usage files
 **/data/

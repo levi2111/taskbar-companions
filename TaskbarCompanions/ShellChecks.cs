@@ -105,6 +105,37 @@ internal static class ShellChecks
             Check(!new AppSettings { ClaudeFolder = claudeHome + "-missing" }.ClaudeFound, "missing Claude folder");
         }
         finally { if (Directory.Exists(claudeHome)) Directory.Delete(claudeHome); }
+
+        var oldData = Path.Combine(Path.GetTempPath(), id + "-old");
+        var newData = Path.Combine(Path.GetTempPath(), id + "-new");
+        try
+        {
+            Directory.CreateDirectory(oldData);
+            File.WriteAllText(Path.Combine(oldData, "settings.json"), "{\"ShowCodex\":false}");
+            File.WriteAllText(Path.Combine(oldData, "claude.usage.json"), "{}");
+            JsonUsageProvider.Prepare(newData, oldData);
+            File.WriteAllText(Path.Combine(oldData, "settings.json"), "{}");
+            JsonUsageProvider.Prepare(newData, oldData);
+            Check(File.ReadAllText(Path.Combine(newData, "settings.json")) == "{\"ShowCodex\":false}" && !File.Exists(Path.Combine(newData, "claude.usage.json")),
+                "old data folder copied once, without usage files");
+        }
+        finally { foreach (var folder in new[] { oldData, newData }) if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+
+        var planted = Path.Combine(Path.GetTempPath(), id + "-cwd");
+        var startedIn = Environment.CurrentDirectory;
+        try
+        {
+            // A codex.exe in whatever folder the app was started from must never be the one it runs.
+            Directory.CreateDirectory(planted);
+            File.WriteAllText(Path.Combine(planted, "codex.exe"), "");
+            Environment.CurrentDirectory = planted;
+            var found = CodexAppServerProvider.FindCodex("codex.exe");
+            Check(found is null || Path.IsPathFullyQualified(found) && !found.StartsWith(planted, StringComparison.OrdinalIgnoreCase), "relative codex.exe ignored");
+        }
+        finally { Environment.CurrentDirectory = startedIn; if (Directory.Exists(planted)) Directory.Delete(planted, true); }
+
+        Check(!new AppSettings().ClaudeLiveUsage && System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"ShowClaude\":true}")?.ClaudeLiveUsage == false,
+            "live account usage off by default");
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "checks.txt"), $"PASS: {count} checks");
     }
 }

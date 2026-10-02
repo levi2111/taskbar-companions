@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace TaskbarCompanions;
 
-// Which companions appear, and where Claude Code and Codex keep their data. Stored in app\data\settings.json.
+// Which companions appear, and where Claude Code and Codex keep their data. Stored in settings.json in the data folder.
 // Empty paths mean the usual places, or the CLAUDE_CONFIG_DIR, CODEX_HOME and CODEX_PATH variables when set.
 public sealed record AppSettings
 {
@@ -13,6 +13,7 @@ public sealed record AppSettings
     public string? ClaudeFolder { get; init; }
     public string? CodexFolder { get; init; }
     public string? CodexExe { get; init; }
+    public bool ClaudeLiveUsage { get; init; }   // risky opt-in, only after accepting its warning in Settings
 
     public static AppSettings Current { get; private set; } = Load();
     private static string FilePath => Path.Combine(JsonUsageProvider.DataDirectory, "settings.json");

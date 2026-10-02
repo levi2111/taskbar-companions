@@ -1,0 +1,13 @@
+Taskbar Companions puts two small animated characters above your taskbar. Their HP and MP bars show how much of your Claude and Codex plan allowance is left.
+
+Before you install:
+
+- It installs for your Windows account only and doesn't need administrator rights.
+
+- No accounts, ads, tracking or telemetry. It reads the usage Claude Code and Codex keep on this PC, and asks Codex's own App Server, which checks with OpenAI using your Codex login. The app connects to the internet itself only if you turn on "live account usage" in Settings. That option is off by default and explains its risks before it can be turned on.
+
+- Settings and saved positions are kept in %LOCALAPPDATA%\TaskbarCompanions. Uninstalling removes them.
+
+- Unofficial fan project: not affiliated with, endorsed by or sponsored by Anthropic or OpenAI. Claude, Claude Code and Clawd are trademarks of Anthropic; Codex and ChatGPT are trademarks of OpenAI.
+
+Privacy policy, install guide and source code: https://github.com/levi2111/taskbar-companions

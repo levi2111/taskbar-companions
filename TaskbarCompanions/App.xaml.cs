@@ -12,6 +12,7 @@ public partial class App : System.Windows.Application
     private System.Windows.Threading.DispatcherTimer? requestTimer;
     private bool changingWindowState;
     private SettingsWindow? settingsWindow;
+    private AboutWindow? aboutWindow;
 
     public int CompanionCount => companions.Count;
 
@@ -58,9 +59,10 @@ public partial class App : System.Windows.Application
         menu.Items.Add("Pause / resume companions", null, (_, _) => companions.ForEach(w => w.ToggleAnimation()));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Settings…", null, (_, _) => OpenSettings());
+        menu.Items.Add("About Taskbar Companions", null, (_, _) => OpenAbout());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => Shutdown());
-        tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? System.Drawing.SystemIcons.Application, Text = "Taskbar companions", ContextMenuStrip = menu, Visible = true };
+        tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? System.Drawing.SystemIcons.Application, Text = "Taskbar Companions", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_, _) => RestoreCompanions();
         requestTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         requestTimer.Tick += (_, _) =>
@@ -135,6 +137,15 @@ public partial class App : System.Windows.Application
         settingsWindow.Closed += (_, _) => settingsWindow = null;
         settingsWindow.Show();
         settingsWindow.Activate();
+    }
+
+    public void OpenAbout()
+    {
+        if (aboutWindow is not null) { aboutWindow.Activate(); return; }
+        aboutWindow = new AboutWindow();
+        aboutWindow.Closed += (_, _) => aboutWindow = null;
+        aboutWindow.Show();
+        aboutWindow.Activate();
     }
 
     public void HideCompanion(string id)

@@ -8,7 +8,20 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
+    <!-- Shown in the exe's Properties > Details, in Task Manager and in the About window. -->
+    <Version>1.0.0</Version>
     <Product>Taskbar Companions</Product>
-    <Description>Floating RPG desktop companions</Description>
+    <AssemblyTitle>Taskbar Companions</AssemblyTitle>
+    <Description>Desktop companions for Codex and Claude that show your plan allowance as HP/MP bars on the Windows taskbar.</Description>
+    <Authors>levi2111</Authors>
+    <Company>levi2111</Company>
+    <Copyright>Copyright © 2026 levi2111</Copyright>
+    <NeutralLanguage>en</NeutralLanguage>
+    <RepositoryUrl>https://github.com/levi2111/taskbar-companions</RepositoryUrl>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- The status line bridge ships beside the exe, outside a single-file bundle, so Claude Code can run it. -->
+    <None Include="..\bridge\claude-statusline.js" Link="bridge\claude-statusline.js"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
 </Project>

@@ -22,7 +22,6 @@ public sealed class CompanionWindow : Window
     private DateTimeOffset nextRead, lastCheck = DateTimeOffset.UtcNow;
     private Point? press;
     private MenuItem dockMenu = null!;
-    private MenuItem? liveMenu;
     private string SettingsPath => Path.Combine(JsonUsageProvider.DataDirectory, character.Id + ".position.json");
 
     public string CharacterId => character.Id;
@@ -33,7 +32,7 @@ public sealed class CompanionWindow : Window
         this.character = character;
         this.home = home;
         // Codex polls its account through the official App Server and falls back to its session logs.
-        // Claude reads local data (Claude Code's cache, the status line bridge) unless live usage is turned on.
+        // Claude reads local data (Claude Code's cache, the status line bridge) unless live account usage is turned on in Settings.
         provider = character.Id == "codex" ? new CodexAppServerProvider() : new ClaudeUsageProvider();
         Title = character.Name + " companion";
         Width = 144; Height = 144;
@@ -91,19 +90,10 @@ public sealed class CompanionWindow : Window
         Item("Demo usage on / off", ToggleDemo);
         Item("Return home", ResetPosition);
         Item("Preview reset celebration", PreviewReset);
-        if (provider is ClaudeUsageProvider claude)
-        {
-            var live = liveMenu = new MenuItem
-            {
-                Header = "Live account usage", IsCheckable = true, IsChecked = claude.Live,
-                ToolTip = "Uses Claude Code's saved login to ask Anthropic's undocumented usage endpoint every two minutes. Off by default."
-            };
-            live.Click += (_, _) => { claude.Live = live.IsChecked; nextRead = default; SavePosition(); };
-            menu.Items.Add(live);
-        }
         menu.Items.Add(new Separator());
         var app = (App)System.Windows.Application.Current;
         Item("Settings…", app.OpenSettings);
+        Item("About…", app.OpenAbout);
         var hide = new MenuItem { Header = "Hide this companion", ToolTip = "Bring it back from Settings." };
         hide.Click += (_, _) => app.HideCompanion(character.Id);
         menu.Items.Add(hide);
@@ -190,11 +180,6 @@ public sealed class CompanionWindow : Window
                 if (p is not null && double.IsFinite(p.Left) && double.IsFinite(p.Top))
                 {
                     Left = p.Left; Top = p.Top; docked = p.Docked;
-                    if (provider is ClaudeUsageProvider claude && p.LiveUsage == true)
-                    {
-                        claude.Live = true;
-                        if (liveMenu is not null) liveMenu.IsChecked = true;
-                    }
                     dockMenu.IsChecked = docked;
                     // Recover disconnected monitors or old off-screen positions.
                     var visible = System.Windows.Forms.Screen.AllScreens.Any(s =>
@@ -214,11 +199,12 @@ public sealed class CompanionWindow : Window
 
     private void SavePosition()
     {
-        try { Directory.CreateDirectory(JsonUsageProvider.DataDirectory); File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new SavedPosition(Left, Top, docked, provider is ClaudeUsageProvider claude ? claude.Live : null))); }
+        try { Directory.CreateDirectory(JsonUsageProvider.DataDirectory); File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new SavedPosition(Left, Top, docked))); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
-    private sealed record SavedPosition(double Left, double Top, bool Docked, bool? LiveUsage = null);
+    // Live account usage used to be saved here too; it now lives in Settings and must be accepted there again.
+    private sealed record SavedPosition(double Left, double Top, bool Docked);
     internal static Brush Brush(string hex) => (Brush)new BrushConverter().ConvertFromString(hex)!;
     internal static TextBlock Text(string value, double size, string color) => new() { Text = value, FontSize = size, Foreground = Brush(color), FontFamily = new FontFamily("Segoe UI") };
 }

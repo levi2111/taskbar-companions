@@ -1,0 +1,58 @@
+name: Bug report
+description: Something doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **don't paste tokens, or the contents of `.credentials.json` or `.claude.json`**. You can shorten paths that show your Windows user name.
+        Security problems go through [private reporting](https://github.com/levi2111/taskbar-companions/security/advisories/new) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Right-click a companion and choose About.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Installer
+        - Portable zip
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Settings → System → About, under Windows specifications.
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: dropdown
+    id: companion
+    attributes:
+      label: Which companion?
+      multiple: true
+      options:
+        - Claude (Clawd)
+        - Codex
+        - The app in general
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead. Screenshots help, and a bar's tooltip says where its numbers came from.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
