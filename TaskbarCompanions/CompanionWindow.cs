@@ -122,7 +122,7 @@ public sealed class CompanionWindow : Window
             lastCheck = now;
             sprite.Energy = new[] { UsageDisplay.Remaining(usage.Weekly, now), UsageDisplay.Remaining(usage.Session, now) }.Min();
             var freshness = demo ? "" : UsageDisplay.Freshness(usage, now);
-            weekly.Update(usage.Weekly, now, freshness, usage.Source);
+            weekly.Update(usage.Weekly, now, freshness, usage.Source, usage.Fable);
             session.Update(usage.Session, now, freshness, usage.Source);
             if (reset.Weekly || reset.Session)
             {
@@ -147,7 +147,8 @@ public sealed class CompanionWindow : Window
     {
         demo = !demo;
         var now = DateTimeOffset.UtcNow;
-        usage = demo ? new(new(character.Id == "codex" ? 76 : 62, now.AddDays(3).AddHours(7)), new(character.Id == "codex" ? 48 : 83, now.AddHours(2).AddMinutes(14)), now, "Demo") : new();
+        usage = demo ? new(new(character.Id == "codex" ? 76 : 62, now.AddDays(3).AddHours(7)), new(character.Id == "codex" ? 48 : 83, now.AddHours(2).AddMinutes(14)), now, "Demo",
+            character.Id == "codex" ? null : new(34, now.AddDays(3).AddHours(7))) : new();
         nextRead = default;
     }
 
@@ -217,6 +218,10 @@ internal sealed class QuotaRow : FrameworkElement
     private readonly bool weekly;
     private readonly Color color;
     private readonly Brush fill;
+    // Claude's weekly Fable allowance: a violet strip along the bottom of the weekly bar, hidden when not reported.
+    private static readonly Brush FableFill = CompanionWindow.Brush("#C58CFF");
+    private const double FableHeight = 3;
+    private double? fable;
     private double percent, shown, refilledAt = double.NegativeInfinity;
     private string label = "";
 
@@ -238,7 +243,10 @@ internal sealed class QuotaRow : FrameworkElement
     {
         var inner = new Rect(2, 2, Math.Max(0, ActualWidth - 4), Math.Max(0, ActualHeight - 4));
         drawing.DrawRectangle(Brushes.Black, null, new Rect(0, 0, ActualWidth, ActualHeight));
-        if (shown > 0) drawing.DrawRectangle(fill, null, new Rect(inner.X, inner.Y, inner.Width * shown / 100, inner.Height));
+        // With a Fable strip, the weekly fill gives up its bottom rows: the strip and a black line above it.
+        var main = fable is null ? inner.Height : Math.Max(0, inner.Height - FableHeight - 1);
+        if (shown > 0) drawing.DrawRectangle(fill, null, new Rect(inner.X, inner.Y, inner.Width * shown / 100, main));
+        if (fable > 0) drawing.DrawRectangle(FableFill, null, new Rect(inner.X, inner.Bottom - FableHeight, inner.Width * fable.Value / 100, FableHeight));
 
         // Refill: a shine sweeps along the bar while the track glows in the bar's color.
         var s = SinceRefill;
@@ -268,7 +276,7 @@ internal sealed class QuotaRow : FrameworkElement
         drawing.DrawText(text, origin);
     }
 
-    public void Update(Quota? quota, DateTimeOffset now, string freshness, string source)
+    public void Update(Quota? quota, DateTimeOffset now, string freshness, string source, Quota? fableQuota = null)
     {
         var remaining = UsageDisplay.Remaining(quota, now);
         var expired = quota?.ResetsAt <= now;
@@ -277,6 +285,10 @@ internal sealed class QuotaRow : FrameworkElement
         ToolTip = $"{stat}: {(remaining is null ? "unknown" : $"{percent:0}% remaining")} · {source} · "
             + (expired == true ? "reset, full until the next request" : UsageDisplay.Countdown(quota?.ResetsAt, now))
             + freshness;
+        fable = UsageDisplay.Remaining(fableQuota, now);
+        if (fable is double left)
+            ToolTip += $"\nFable (weekly): {left:0}% remaining · "
+                + (fableQuota?.ResetsAt <= now ? "reset, full until the next request" : UsageDisplay.Countdown(fableQuota?.ResetsAt, now));
         InvalidateVisual();
     }
 

@@ -35,7 +35,11 @@ internal static class ShellChecks
             Check(provider.Read(id).Source == "Invalid usage values", "out-of-range quota");
             File.WriteAllText(path, "{\"weekly\":{\"remainingPercent\":0},\"session\":{\"remainingPercent\":100}}");
             var result = provider.Read(id);
-            Check(result.Weekly?.RemainingPercent == 0 && result.Session?.RemainingPercent == 100, "quota endpoints");
+            Check(result.Weekly?.RemainingPercent == 0 && result.Session?.RemainingPercent == 100 && result.Fable is null, "quota endpoints");
+            File.WriteAllText(path, "{\"weekly\":{\"remainingPercent\":50},\"fable\":{\"remainingPercent\":27}}");
+            Check(provider.Read(id).Fable?.RemainingPercent == 27, "published Fable quota");
+            File.WriteAllText(path, "{\"fable\":{\"remainingPercent\":-1}}");
+            Check(provider.Read(id).Source == "Invalid usage values", "out-of-range Fable quota");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
         var log = Path.Combine(Path.GetTempPath(), id + ".jsonl");
@@ -71,9 +75,24 @@ internal static class ShellChecks
         {
             var usage = ClaudeUsageProvider.Parse(claude.RootElement, now);
             Check(usage?.Session?.RemainingPercent == 67 && usage.Session.ResetsAt == new DateTimeOffset(2026, 9, 22, 3, 40, 0, 579, TimeSpan.Zero).AddTicks(160)
-                && usage.Weekly?.RemainingPercent == 95 && usage.Weekly.ResetsAt is null, "claude usage windows");
+                && usage.Weekly?.RemainingPercent == 95 && usage.Weekly.ResetsAt is null && usage.Fable is null, "claude usage windows");
+        }
+        // Rows as the usage endpoint sends them: only the weekly row scoped to the Fable model is the Fable allowance.
+        using (var claude = System.Text.Json.JsonDocument.Parse("{\"five_hour\":{\"utilization\":0,\"resets_at\":null},\"limits\":["
+            + "{\"kind\":\"weekly_all\",\"group\":\"weekly\",\"percent\":99,\"resets_at\":\"2026-09-28T06:00:00+00:00\",\"scope\":null},"
+            + "{\"kind\":\"weekly_scoped\",\"group\":\"weekly\",\"percent\":12,\"resets_at\":null,\"scope\":{\"model\":null,\"surface\":{\"display_name\":\"Cowork\"}}},"
+            + "{\"kind\":\"weekly_scoped\",\"group\":\"weekly\",\"percent\":73,\"resets_at\":\"2026-09-28T05:59:59.587108+00:00\",\"scope\":{\"model\":{\"id\":null,\"display_name\":\"Fable\"},\"surface\":null}}]}"))
+        {
+            var usage = ClaudeUsageProvider.Parse(claude.RootElement, now);
+            Check(usage?.Fable?.RemainingPercent == 27 && usage.Fable.ResetsAt?.UtcDateTime.Date == new DateTime(2026, 9, 28), "claude weekly Fable limit");
         }
         Check(UsageDisplay.Freshness(new(UpdatedAt: now.AddMinutes(-90)), now) == " · as of 1h 30m ago", "freshness age");
+        // An old reading whose weekly window has since reset: full while Claude Code rests, unknown once it's been used again.
+        var old = new UsageSnapshot(new(1, now.AddHours(-2)), new(40, now.AddHours(1)), now.AddHours(-9), Fable: new(27, now.AddHours(-2)));
+        Check(ClaudeUsageProvider.SinceUse(old, now.AddHours(-3)) == old, "reset window stays full until Claude Code is used");
+        var since = ClaudeUsageProvider.SinceUse(old, now.AddHours(-1));
+        Check(since.Weekly is null && since.Fable is null && since.Session == old.Session, "reset window unknown after later use");
+        Check(ClaudeUsageProvider.SinceUse(old with { UpdatedAt = now.AddMinutes(-30) }, now).Weekly is not null, "fresh reading kept");
         var sheet = Path.Combine(Path.GetTempPath(), id + ".png");
         try
         {

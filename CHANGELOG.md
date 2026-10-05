@@ -2,6 +2,17 @@
 
 All notable changes to Taskbar Companions. Versions follow [Semantic Versioning](https://semver.org/), and this file follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- Clawd shows the weekly Fable allowance, for Claude plans with a separate weekly limit for the Fable model: a thin violet strip along the bottom of the HP bar, with its percentage and reset time in the bar's hover text. It comes from Claude Code's saved usage reading or live account usage, and is hidden when neither reports one. `claude.usage.json` accepts an optional `fable` entry.
+- Settings says how old Claude Code's saved usage reading is.
+
+### Fixed
+
+- Clawd no longer shows full bars from an out-of-date reading. Claude Code saves a usage reading only when it checks usage itself, so the reading could predate a reset by hours or days while Claude Code was in use, and the bars showed as freshly reset. Such a window is now left empty, and the hover text says to open `/usage` in Claude Code to refresh it.
+
 ## [1.0.0] - 2026-09-28
 
 The first packaged release: a normal Windows installer and a portable zip, with nothing else to install.

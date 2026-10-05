@@ -37,6 +37,7 @@ You only need the tool for the companion you want. On first start the app shows 
 - **About…** shows the version, license, privacy summary and trademark notice, with links to this page and to your settings folder.
 - Drag a character or its bars to move it. **Sit on taskbar** toggles docking; **Return home** resets placement.
 - Each character has two floating tracks: green HP for weekly allowance remaining, blue MP for the short (five-hour) window. Inside each bar is the time until that window resets. HP shows whole days ("5d") until three days remain, then "2d 4h", "9h", and "4h 12m" under five hours. MP shows "2h 13m". Hover a bar for details and where the data came from; hover a character for one of its lines.
+- When your Claude plan has a separate weekly limit for the Fable model, Clawd's HP bar also carries a thin violet strip along its bottom edge: the weekly Fable allowance remaining. It's hidden when no source reports one; hover the HP bar for its percentage and reset time.
 - When a window resets, its bar drains and pours back full with a shine, and the character celebrates. **Preview reset celebration** in the right-click menu plays it on demand.
 - Unknown usage leaves the bars empty. **Demo usage on / off** shows sample values, and the hover details say so.
 - Fullscreen apps temporarily hide the companions without minimizing them.
@@ -81,14 +82,14 @@ Nothing here sends a message or spends allowance. If a source has gone quiet, th
 
 By default, Claude usage comes only from local files:
 
-- **Claude Code's own cache.** Claude Code stores its latest usage reading in `~\.claude.json` (or in the Claude Code folder chosen in Settings, or under `$CLAUDE_CONFIG_DIR`). The app reads only that entry, so it's as fresh as Claude Code's last check.
+- **Claude Code's own cache.** Claude Code stores its latest usage reading in `~\.claude.json` (or in the Claude Code folder chosen in Settings, or under `$CLAUDE_CONFIG_DIR`). The app reads only that entry, so it's as fresh as Claude Code's last check. Claude Code checks when it shows your usage, for example on its `/usage` screen, not after every reply, so this reading can be hours or days old. A window that has reset since the reading shows as full until Claude Code is used again; after that its bar is left empty, and the hover text says to refresh the reading, because the app can't know what has been used since. The weekly Fable allowance comes from this reading too: the row of its `limits` list with `kind` `weekly_scoped` and `scope.model.display_name` `Fable`.
 - **Status line bridge.** `bridge/claude-statusline.js` is a Claude Code [status line](https://code.claude.com/docs/en/statusline) command, and it ships beside the app. Claude Code passes it `rate_limits.five_hour` and `rate_limits.seven_day` after the first response of a session. It prints `Opus · 5h 24% · 7d 41%` in Claude Code and atomically writes `claude.usage.json` in the app's data folder. It needs [Node.js](https://nodejs.org/). To turn it on, open **Settings**, click **Copy status line setting**, and paste the line into `~\.claude\settings.json` ([step by step](docs/INSTALL.md#optional-the-status-line-bridge)). It looks like this, with the path to your copy of the app:
 
   ```json
   "statusLine": { "type": "command", "command": "node \"C:/Users/you/AppData/Local/Programs/Taskbar Companions/bridge/claude-statusline.js\"" }
   ```
 
-  It only updates while a terminal Claude Code session is responding; the VS Code extension does not run status line commands. Usage on claude.ai counts toward the same limits but only shows up the next time Claude Code responds.
+  It only updates while a terminal Claude Code session is responding; the VS Code extension does not run status line commands. Usage on claude.ai counts toward the same limits but only shows up the next time Claude Code responds. The status line gets no Fable figure, so the Fable strip keeps the value from Claude Code's cache or live account usage.
 
 **Live account usage (risky, off by default).** A separate red area in **Settings** can turn on polling, every two minutes, of the endpoint behind Claude Code's `/usage` screen (`GET https://api.anthropic.com/api/oauth/usage`). For this, the app reads the login token Claude Code stores in `~\.claude\.credentials.json`. The token is sent only to `api.anthropic.com` (redirects aren't followed) and is never logged, written, or refreshed. Before it turns on, a warning explains the risks, and you have to accept them:
 
@@ -111,7 +112,7 @@ Any tool can publish usage by writing JSON files into the app's data folder, `%L
 }
 ```
 
-Percentages range from 0 to 100; null means unknown. Use ISO-8601 timestamps with time zones, and write with an atomic file replacement to avoid partial reads. The app polls every second and notes the data's age after five minutes. Once a window's `resetsAt` passes, it shows that window as full, because a reset clears usage until the next request starts a new window. `session` means the provider's short quota window, not a chat session. There's a sample in `examples/`. You can also implement `IUsageProvider` in code.
+`claude.usage.json` may also carry `"fable": { "remainingPercent": 27, "resetsAt": "…" }` for the weekly Fable allowance; leave it out when unknown. Percentages range from 0 to 100; null means unknown. Use ISO-8601 timestamps with time zones, and write with an atomic file replacement to avoid partial reads. The app polls every second and notes the data's age after five minutes. Once a window's `resetsAt` passes, it shows that window as full, because a reset clears usage until the next request starts a new window. `session` means the provider's short quota window, not a chat session. There's a sample in `examples/`. You can also implement `IUsageProvider` in code.
 
 ## Privacy and network access
 
@@ -156,7 +157,7 @@ powershell -ExecutionPolicy Bypass -File .\launch.ps1
 dotnet build TaskbarCompanions/TaskbarCompanions.csproj --configfile NuGet.Config
 ```
 
-- **Logic checks:** run the built exe with `--self-test`. It writes `checks.txt` beside the exe and exits with 0 on success, 1 on failure. It covers countdown boundaries, data freshness, malformed JSON, quota bounds, Codex log and App Server parsing, Claude usage parsing, bar labels, reset refills, fullscreen versus maximized geometry, the Codex artwork fallback and transparency, choosing companions and folders, copying settings from the old data folder, ignoring relative `codex.exe` paths, and live account usage being off by default.
+- **Logic checks:** run the built exe with `--self-test`. It writes `checks.txt` beside the exe and exits with 0 on success, 1 on failure. It covers countdown boundaries, data freshness, malformed JSON, quota bounds, Codex log and App Server parsing, Claude usage parsing including the weekly Fable limit, readings that predate a reset, bar labels, reset refills, fullscreen versus maximized geometry, the Codex artwork fallback and transparency, choosing companions and folders, copying settings from the old data folder, ignoring relative `codex.exe` paths, and live account usage being off by default.
 - **Startup smoke check:** run with `--smoke-test`. It opens the companions the settings show alongside any running copy, checks the shared taskbar entry and minimize/restore, renders `codex.preview.png` and/or `claude.preview.png` mid reset celebration, writes `desktop-checks.txt`, and exits after about four seconds.
 - **Release files:** `powershell -ExecutionPolicy Bypass -File packaging\build.ps1` builds the self-contained exe, runs the logic checks on it, and writes the installer (needs [Inno Setup 6](https://jrsoftware.org/isinfo.php)), the portable zip, `SHA256SUMS.txt` and release notes into `dist\`. Release builds take Microsoft's .NET runtime packs from nuget.org; `packaging/NuGet.Config` allows nothing else.
 - **GitHub Actions** builds and checks every push and pull request, and builds the release files when a version is tagged. [docs/PUBLISHING.md](docs/PUBLISHING.md) describes the release process.

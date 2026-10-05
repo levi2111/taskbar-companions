@@ -84,8 +84,12 @@ public sealed class SettingsWindow : Window
     private void Refresh()
     {
         var s = Pending;
+        // Claude Code saves a reading only when it checks usage itself, which is why the bars can lag behind.
+        var reading = ClaudeUsageProvider.ReadClaudeCache(s.ClaudeStateFile)?.UpdatedAt is DateTimeOffset at
+            ? $"Claude Code last saved a usage reading {UsageDisplay.Age(DateTimeOffset.UtcNow - at)} ago."
+            : "Claude Code hasn't saved a usage reading yet.";
         claudeStatus.Text = s.ClaudeFound
-            ? $"Found Claude Code data in {s.ClaudeDirectory}."
+            ? $"Found Claude Code data in {s.ClaudeDirectory}. {reading} It saves one when it checks your usage, for example on its /usage screen, not after every reply."
             : $"No Claude Code data in {s.ClaudeDirectory}. The bars stay empty until Claude Code has been used there, or the status line bridge publishes usage.";
 
         var codex = new List<string>();

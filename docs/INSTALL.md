@@ -93,7 +93,7 @@ To build the same installer and zip as a release, run `powershell -ExecutionPoli
 - The app also has an icon in the **notification area** near the clock. You may need to click the **^** arrow to see it. Right-click it for the same options, and for **Quit**.
 - On first start the app shows the companions whose tools it finds. To change which appear, right-click a character and choose **Settings…**.
 
-**Are the bars empty?** That's normal until Claude Code or Codex has been used on this PC, because the app reads the usage they save. Use them once, and the bars fill within a minute or two. **Settings…** shows what the app found for each companion.
+**Are the bars empty?** That's normal until Claude Code or Codex has been used on this PC, because the app reads the usage they save. Use them once, and the bars fill within a minute or two. Clawd's bars follow the usage reading Claude Code saves, which it refreshes when it shows your usage (type `/usage` in Claude Code), not after every reply. **Settings…** shows what the app found for each companion, and how old that reading is.
 
 At the bottom of Settings there's a red area, **Live account usage**. It's off by default, and we recommend leaving it off: it reuses Claude Code's login in a way Anthropic's terms don't allow, which can put your Claude account at risk. The app explains the details before it can be turned on.
 
@@ -187,6 +187,7 @@ New, unsigned apps are sometimes flagged by mistake. [Check your download](#chec
 The app shows what Claude Code and Codex last saved; it doesn't track your usage itself.
 
 - **Empty bars:** open **Settings** to see what the app found. Use Claude Code or Codex once so they save a reading. If they keep their data somewhere unusual, choose the folder in Settings.
+- **Clawd's bars are empty and the hover text says "Claude Code was used since this reading":** Claude Code's saved reading is from before the last reset, and it has been used since, so the app can't tell what's left. Type `/usage` in Claude Code to make it save a new reading. Claude Code doesn't save one after every reply; the [status line bridge](#optional-the-status-line-bridge) does that for terminal sessions.
 - **"as of 2h 10m ago":** the reading is that old, because Claude Code or Codex hasn't checked since. Using them updates it. For Claude Code in a terminal, the [status line bridge](#optional-the-status-line-bridge) keeps it fresh.
 - Usage on claude.ai or in the Claude apps counts toward the same limits, but shows up only after Claude Code's next check.
 

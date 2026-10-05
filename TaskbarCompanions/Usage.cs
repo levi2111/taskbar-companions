@@ -5,8 +5,9 @@ using System.Threading.Tasks;
 namespace TaskbarCompanions;
 
 public sealed record Quota(double? RemainingPercent = null, DateTimeOffset? ResetsAt = null);
+// Fable is Claude's separate weekly allowance for the Fable model; null when the source doesn't report one.
 public sealed record UsageSnapshot(Quota? Weekly = null, Quota? Session = null,
-    DateTimeOffset? UpdatedAt = null, string Source = "Not connected");
+    DateTimeOffset? UpdatedAt = null, string Source = "Not connected", Quota? Fable = null);
 
 public interface IUsageProvider
 {
@@ -51,7 +52,7 @@ public sealed class JsonUsageProvider : IUsageProvider
             var snapshot = JsonSerializer.Deserialize<UsageSnapshot>(File.ReadAllText(path),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (snapshot is null) return new(Source: "Empty usage file");
-            if (!Valid(snapshot.Weekly) || !Valid(snapshot.Session)) return new(Source: "Invalid usage values");
+            if (!Valid(snapshot.Weekly) || !Valid(snapshot.Session) || !Valid(snapshot.Fable)) return new(Source: "Invalid usage values");
             return snapshot with { Source = "Local bridge" };
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
@@ -229,16 +230,38 @@ public sealed class ClaudeUsageProvider : IUsageProvider
             }
         var bridged = fallback.Read(characterId);
         var live = latest;
-        var snapshot = live is not null && !(bridged.UpdatedAt > live.UpdatedAt) ? live : bridged;
-        return problem is string p ? snapshot with { Source = $"{snapshot.Source} · {p}" } : snapshot;
+        // The status line carries no Fable figure, so a newer bridge reading keeps the account's.
+        var snapshot = live is not null && !(bridged.UpdatedAt > live.UpdatedAt) ? live : bridged with { Fable = bridged.Fable ?? live?.Fable };
+        var note = problem;
+        if (LastUse() is DateTimeOffset used && SinceUse(snapshot, used) is var known && known != snapshot)
+        {
+            snapshot = known;
+            note ??= "Claude Code was used since this reading, open its /usage screen to refresh it";
+        }
+        return note is string p ? snapshot with { Source = $"{snapshot.Source} · {p}" } : snapshot;
+    }
+
+    // Claude Code rewrites its state file as it runs, so its last write says when Claude Code was last in use.
+    private static DateTimeOffset? LastUse()
+    {
+        try { return File.Exists(AppSettings.Current.ClaudeStateFile) ? File.GetLastWriteTimeUtc(AppSettings.Current.ClaudeStateFile) : null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    // A window that reset after the reading is full only until the next request. Claude Code saves a reading
+    // only when it checks usage itself, so once it has been used past that reset the window is unknown, not full.
+    internal static UsageSnapshot SinceUse(UsageSnapshot s, DateTimeOffset used)
+    {
+        Quota? Known(Quota? q) => q?.ResetsAt is DateTimeOffset reset && s.UpdatedAt < reset && reset < used ? null : q;
+        return s with { Weekly = Known(s.Weekly), Session = Known(s.Session), Fable = Known(s.Fable) };
     }
 
     public void Refresh() { lock (gate) nextPoll = DateTime.UtcNow.AddSeconds(3); }
 
     // Claude Code caches its own usage reading in .claude.json; reusing it avoids the rate-limited endpoint.
-    private static UsageSnapshot? ReadClaudeCache()
+    internal static UsageSnapshot? ReadClaudeCache(string? path = null)
     {
-        var path = AppSettings.Current.ClaudeStateFile;
+        path ??= AppSettings.Current.ClaudeStateFile;
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -296,7 +319,26 @@ public sealed class ClaudeUsageProvider : IUsageProvider
         }
         var weekly = Window(body, "seven_day");
         var session = Window(body, "five_hour");
-        return weekly is null && session is null ? null : new(weekly, session, at, "Claude account (live)");
+        return weekly is null && session is null ? null : new(weekly, session, at, "Claude account (live)", Fable(body));
+    }
+
+    // Per-model weekly limits are rows of `limits`: kind "weekly_scoped", named in scope.model.display_name,
+    // with `percent` used. Absent on plans or responses without a Fable limit.
+    private static Quota? Fable(JsonElement body)
+    {
+        if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("limits", out var rows) || rows.ValueKind != JsonValueKind.Array) return null;
+        foreach (var row in rows.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("kind", out var kind) || kind.ValueKind != JsonValueKind.String || kind.GetString() != "weekly_scoped") continue;
+            if (!row.TryGetProperty("scope", out var scope) || scope.ValueKind != JsonValueKind.Object
+                || !scope.TryGetProperty("model", out var model) || model.ValueKind != JsonValueKind.Object
+                || !model.TryGetProperty("display_name", out var name) || name.ValueKind != JsonValueKind.String
+                || !string.Equals(name.GetString(), "Fable", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!row.TryGetProperty("percent", out var used) || used.ValueKind != JsonValueKind.Number) continue;
+            DateTimeOffset? resets = row.TryGetProperty("resets_at", out var r) && r.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(r.GetString(), out var parsed) ? parsed : null;
+            return new(Math.Clamp(100 - used.GetDouble(), 0, 100), resets);
+        }
+        return null;
     }
 }
 
@@ -384,9 +426,10 @@ public static class UsageDisplay
     {
         if (!IsStale(s, now)) return "";
         if (s.UpdatedAt is not DateTimeOffset at || at > now.AddMinutes(1)) return " · stale or missing timestamp";
-        var age = now - at;
-        return " · as of " + (age.TotalHours >= 1 ? $"{(int)age.TotalHours}h {age.Minutes:00}m" : $"{(int)age.TotalMinutes}m") + " ago";
+        return " · as of " + Age(now - at) + " ago";
     }
+
+    public static string Age(TimeSpan age) => age.TotalHours >= 1 ? $"{(int)age.TotalHours}h {age.Minutes:00}m" : $"{(int)age.TotalMinutes}m";
 
     // A window whose reset has passed has no usage in it until the next request starts a new one.
     public static double? Remaining(Quota? q, DateTimeOffset now) => q?.ResetsAt <= now ? 100 : q?.RemainingPercent;
