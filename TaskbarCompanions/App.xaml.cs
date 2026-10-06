@@ -26,10 +26,11 @@ public partial class App : System.Windows.Application
         changingWindowState = true;
         try
         {
+            // Companions hide instead of minimizing: Windows leaves a minimized window that has no taskbar
+            // button of its own as a stub in the corner of the screen.
             foreach (var window in companions)
             {
-                window.WindowState = state;
-                if (state == WindowState.Normal) window.Show();
+                if (state == WindowState.Minimized) window.Hide(); else window.Show();
             }
             if (anchor is not null) anchor.WindowState = state;
             // A restore from the taskbar leaves its button active, so the next click there minimizes.
@@ -76,15 +77,15 @@ public partial class App : System.Windows.Application
         requestTimer.Start();
         if (e.Args.Contains("--smoke-test"))
         {
-            // Exercise the state change the right-click menu makes.
-            MainWindow.WindowState = WindowState.Minimized;
+            // Exercise what the right-click menu and the taskbar button do.
+            MinimizeCompanions();
             var phase = 0;
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             timer.Tick += (_, _) =>
             {
                 if (phase++ == 0)
                 {
-                    if (companions.Any(w => w.WindowState != WindowState.Minimized)
+                    if (companions.Any(w => w.IsVisible)
                         || companions.Any(w => w.ShowInTaskbar || !Desktop.IsOutOfAltTab(w))
                         || anchor is not { ShowInTaskbar: true, WindowState: WindowState.Minimized }
                         || companions.Skip(1).Any(w => w.Owner != MainWindow))
@@ -93,13 +94,13 @@ public partial class App : System.Windows.Application
                         Shutdown(1);
                         return;
                     }
-                    MainWindow.WindowState = WindowState.Normal;
+                    RestoreCompanions();
                     companions.ForEach(w => { w.ToggleDemo(); w.PreviewReset(); });
                     return;
                 }
                 timer.Stop();
                 foreach (var window in companions) window.SavePreview();
-                var restored = companions.All(w => w.WindowState == WindowState.Normal && w.IsVisible);
+                var restored = companions.All(w => w.IsVisible) && anchor?.WindowState == WindowState.Normal;
                 System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "desktop-checks.txt"), restored ? "PASS: one taskbar entry, companions out of Alt+Tab, owned companions, shared persistent minimize and restore, rendered previews" : "FAIL: restore");
                 Shutdown(restored ? 0 : 1);
             };
@@ -139,12 +140,10 @@ public partial class App : System.Windows.Application
             {
                 MainWindow = window;
                 window.Title = "Taskbar Companions";
-                window.StateChanged += (_, _) => SetCompanionState(window.WindowState);
             }
             else
             {
-                // Owned windows keep independent positions and behavior, but minimize
-                // and restore with the primary window.
+                // Owned windows keep independent positions and behavior.
                 window.Owner = MainWindow;
             }
             companions.Add(window);
@@ -152,6 +151,8 @@ public partial class App : System.Windows.Application
             Desktop.KeepOutOfAltTab(window);
             window.Show();
         }
+        // New companions arrive visible, so the taskbar button should say so too.
+        if (anchor?.WindowState == WindowState.Minimized) anchor.WindowState = WindowState.Normal;
     }
 
     public void OpenSettings()

@@ -36,7 +36,7 @@ public sealed class CompanionWindow : Window
         provider = character.Id == "codex" ? new CodexAppServerProvider() : new ClaudeUsageProvider();
         Title = character.Name + " companion";
         Width = 144; Height = 144;
-        WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.CanMinimize;
+        WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true; Background = Brushes.Transparent;
         ShowInTaskbar = false; ShowActivated = false; Topmost = true;
         UseLayoutRounding = true;
@@ -114,7 +114,7 @@ public sealed class CompanionWindow : Window
             // Fade out instead of hiding, and never undo a user's minimize.
             Opacity = fullscreen ? 0 : 1;
             IsHitTestVisible = !fullscreen;
-            if (!fullscreen && WindowState != WindowState.Minimized && docked && !dragging) Desktop.Dock(this, home, false);
+            if (!fullscreen && IsVisible && docked && !dragging) Desktop.Dock(this, home, false);
             if (!demo) usage = provider.Read(character.Id);
             // A window resetting while we watch is worth a celebration and a fresh reading.
             bool Crossed(Quota? q) => q?.ResetsAt is DateTimeOffset r && r > lastCheck && r <= now;
@@ -130,7 +130,7 @@ public sealed class CompanionWindow : Window
                 Celebrate(reset.Weekly ? weekly : null, reset.Session ? session : null);
             }
         }
-        var visible = Opacity > 0 && WindowState != WindowState.Minimized;
+        var visible = Opacity > 0 && IsVisible;
         if (visible) { weekly.Step(); session.Step(); }
         if (visible && !paused) sprite.InvalidateVisual();
     }
