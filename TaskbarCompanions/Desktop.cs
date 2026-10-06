@@ -29,6 +29,21 @@ internal static class Desktop
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out Rect rect, int size);
 
+    [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window, int index);
+    [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr window, int index, int value);
+
+    // Alt+Tab and the taskbar skip tool windows (WS_EX_TOOLWINDOW). Call before the window is first shown.
+    public static void KeepOutOfAltTab(Window window)
+    {
+        var handle = new WindowInteropHelper(window).EnsureHandle();
+        SetWindowLong(handle, -20, GetWindowLong(handle, -20) | 0x80);
+    }
+
+    public static bool IsOutOfAltTab(Window window) => (GetWindowLong(new WindowInteropHelper(window).Handle, -20) & 0x40080) == 0x80;
+
+    // Alt+Tab lists windows front to back, so the back of the window order is the end of its list.
+    public static void SendToBack(Window window) => SetWindowPos(new WindowInteropHelper(window).Handle, (IntPtr)1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+
     public static bool ForegroundIsFullscreen()
     {
         var foreground = GetForegroundWindow();

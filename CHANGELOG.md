@@ -2,6 +2,12 @@
 
 All notable changes to Taskbar Companions. Versions follow [Semantic Versioning](https://semver.org/), and this file follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+
+- The companions no longer get in the way of Alt+Tab. Their entry used to sit near the front of the list, because they are always on top. It now stays at the end, and moves back there as soon as you switch away from it. The taskbar button works as before.
+
 ## [1.0.0] - 2026-10-06
 
 The first packaged release: a normal Windows installer and a portable zip, with nothing else to install.

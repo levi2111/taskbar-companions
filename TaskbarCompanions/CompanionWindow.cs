@@ -111,7 +111,7 @@ public sealed class CompanionWindow : Window
         {
             nextRead = now.AddSeconds(1);
             var fullscreen = Desktop.ForegroundIsFullscreen();
-            // Keep the taskbar button available, and never undo a user's minimize.
+            // Fade out instead of hiding, and never undo a user's minimize.
             Opacity = fullscreen ? 0 : 1;
             IsHitTestVisible = !fullscreen;
             if (!fullscreen && WindowState != WindowState.Minimized && docked && !dragging) Desktop.Dock(this, home, false);

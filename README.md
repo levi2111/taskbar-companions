@@ -30,7 +30,7 @@ You only need the tool for the companion you want. On first start the app shows 
 
 ## Using the companions
 
-- Right-click the running app's taskbar icon and choose **Pin to taskbar**. The characters share one taskbar button and one Alt+Tab entry.
+- Right-click the running app's taskbar icon and choose **Pin to taskbar**. The characters share one taskbar button and one Alt+Tab entry, which stays at the end of the Alt+Tab list so it is never in the way when you switch windows.
 - Right-click a character and choose **Minimize companions**. The shared taskbar button minimizes and restores them together; launching again restores them without moving them.
 - The tray menu also offers **Restore companions**, **Bring companions home**, **Demo usage on / off**, **Pause / resume companions**, **Settings…**, **About Taskbar Companions**, and **Quit**. Closing a character minimizes all of them.
 - **Settings…** (in the tray menu and each character's right-click menu) shows or hides each companion, and says what it found for each: Claude Code's folder, `codex.exe`, Codex's session logs, and the Codex pet's artwork. If Claude Code or Codex keeps its data somewhere unusual, pick the folder (or `codex.exe`) there. **Hide this companion** in a character's right-click menu hides it straight away; the last one showing can't be hidden.
